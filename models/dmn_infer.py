@@ -9,7 +9,7 @@ import pyro.contrib.gp as gp
 from pyro.contrib.gp.parameterized import Parameterized
 from pyro.contrib.gp.util import conditional
 
-import PyDMN
+import PyDMN as pydmn
 
 class dmn( Parameterized ):
     # this is equivalent to
@@ -150,7 +150,7 @@ class dmn( Parameterized ):
                             torch.stack([
                                 torch.stack([
                                     torch.stack([
-                                PyDMN.util.GP_sample( name=f'f_coord_v{v}_h{h}_sr{sr_i}_lw{lw_i}',
+                                pydmn.util.GP_sample( name=f'f_coord_v{v}_h{h}_sr{sr_i}_lw{lw_i}',
                                             X=self.Y_time,
                                             f_loc=self.gp.coord.loc[v,h,sr_i,lw_i,:],
                                             f_loc_mean=self.gp.coord.loc_mean[v,h,sr_i,lw_i],
@@ -175,7 +175,7 @@ class dmn( Parameterized ):
             gp_socpop = torch.stack([
                                     torch.stack([
                                         torch.stack([
-                                PyDMN.util.GP_sample( name=f'f_socpop_v{v}_{["soc","pop"][sp_i]}_lw{lw_i}',
+                                pydmn.util.GP_sample( name=f'f_socpop_v{v}_{["soc","pop"][sp_i]}_lw{lw_i}',
                                             X=self.Y_time,
                                             f_loc=self.gp.socpop.loc[v,sp_i,lw_i,:],
                                             f_loc_mean=self.gp.socpop.loc_mean[v,sp_i,lw_i],
@@ -270,7 +270,7 @@ class dmn( Parameterized ):
                                             torch.stack([
                                                 torch.stack([
                                                     torch.stack([
-                                                        torch.stack( PyDMN.util.conditional( Xnew=Y_time_new, X=self.Y_time,
+                                                        torch.stack( pydmn.util.conditional( Xnew=Y_time_new, X=self.Y_time,
                                                                                                     kernel=None,
                                                                                                     f_loc=self.gp.coord.loc[v,h,sr_i,lw_i,:], f_scale_tril=self.gp.coord.cov_tril[v,h,sr_i,lw_i,:,:],
                                                                                                     Lff=Lff_coord[lw_i], full_cov=True, whiten=self.whiten, jitter=self.jitter,
@@ -311,7 +311,7 @@ class dmn( Parameterized ):
             gp_socpop_loc_and_cov_new = torch.stack([
                                             torch.stack([
                                                 torch.stack([
-                                                    torch.stack( PyDMN.util.conditional( Xnew=Y_time_new, X=self.Y_time,
+                                                    torch.stack( pydmn.util.conditional( Xnew=Y_time_new, X=self.Y_time,
                                                                                                 kernel=None,
                                                                                                 f_loc=self.gp.socpop.loc[v,sp_i,lw_i,:], f_scale_tril=self.gp.socpop.cov_tril[v,sp_i,lw_i,:,:],
                                                                                                 Lff=Lff_socpop[lw_i], full_cov=True, whiten=self.whiten, jitter=self.jitter,
