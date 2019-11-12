@@ -7,10 +7,11 @@ try:
 except ImportError:
     __version__ = version_prefix
 
-from PyDMN import means, models, util, plot
+from PyDMN import kernels, means, models, util, plot
 
 __all__ = [
     '__version__',
+    'kernels',
     'means',
     'models',
     'util',
