@@ -1,9 +1,6 @@
-import numbers
+import torch.nn as nn
 
-from pyro.contrib.gp.parameterized import Parameterized
-
-
-class Mean(Parameterized):
+class Mean(nn.Module):
     """
     Base class for mean functions used in the Gaussian Process module.
 
