@@ -32,7 +32,7 @@ class dmn_toy( nn.Module ):
 
     """
 
-    def __init__( self, Y, Y_time, H_dim=3, jitter=1e-6, init_param=False ):
+    def __init__( self, Y, Y_time, H_dim=3, jitter=1e-3, init_param=False ):
 
         super(dmn_toy, self).__init__()
 
@@ -46,7 +46,7 @@ class dmn_toy( nn.Module ):
         self.socpop = False
 
         # Covariance function (kernel) of the GP is defined here
-        self.kernel = pydmn.kernels.RBF(variance=torch.tensor([1.]), lengthscale=torch.tensor([1.]))
+        self.kernel = pydmn.kernels.RBF(variance=torch.tensor([1.]), lengthscale=torch.tensor([12.]))
 
         Kff = self.kernel(self.Y_time.reshape(-1,1)).detach()
         Kff.view(-1)[::self.T_net + 1] += self.jitter  # add jitter to the diagonal
@@ -68,16 +68,17 @@ class dmn_toy( nn.Module ):
     def model(self):
 
         ## Optimization on Kernel params (often overfits)
-        pyro.module("kernel", self.kernel)
-        kernel_model = self.kernel
+        # pyro.module("kernel", self.kernel)
+        # kernel_model = self.kernel
 
-        ## Prior on Kernel params
-        # priors = { 'lengthscale': dist.InverseGamma(torch.tensor([1.]),torch.tensor([12.])),
-        #             'variance': dist.InverseGamma(torch.tensor([2.]),torch.tensor([1.])) }
-        # lifted_module = pyro.random_module("kernel", self.kernel, priors)
-        # kernel_model = lifted_module()
-        # x = torch.linspace(0,5,101)[1:]
-        # f=dist.InverseGamma(torch.tensor([2.]),torch.tensor([1.]))
+        # Prior on Kernel params
+        priors = { 'lengthscale': dist.InverseGamma(torch.tensor([3.]),torch.tensor([36.])),
+                    'variance': dist.InverseGamma(torch.tensor([5.]),torch.tensor([5.])) }
+        lifted_module = pyro.random_module("kernel", self.kernel, priors)
+        kernel_model = lifted_module()
+
+        # x = torch.linspace(0,2,101)[1:]
+        # f=dist.InverseGamma(torch.tensor([5.]),torch.tensor([5.]))
         # plt.plot(x,f.log_prob(x).exp())
 
         # Covariance matrix of observed times entailed by our kernel
@@ -122,13 +123,6 @@ class dmn_toy( nn.Module ):
 
     def guide(self):
 
-        # For the kernel prior #
-        # self.k_loc = pyro.param( "k_loc", torch.zeros([2]) )
-        # self.k_scale = pyro.param( "k_scale", torch.ones([2]), constraint=constraints.positive )
-        # pyro.sample( f"kernel.lengthscale", dist.Normal(self.k_loc[0],self.k_scale[0]) )
-        # pyro.sample( f"kernel.variance", dist.Normal(self.k_loc[1],self.k_scale[1]) )
-
-        # self.gp_cov_tril = torch.eye(self.T_net).expand((self.V_net,self.H_dim,self.T_net,self.T_net))
         for v in range( self.V_net ):
             for h in range( self.H_dim ):
                 # v=0; h=0
