@@ -195,13 +195,16 @@ class dmn( Parameterized ):
 
         if self.coord:
             # gp_coord.shape # gp_coord[v,h,sr_i,lw_i,t]
-            send = gp_coord[:,:,0,:,:].expand( self.V_net, self.V_net, self.H_dim, self.lw_dim, self.T_net)
-            receive = gp_coord[:,:,1,:,:].expand( self.V_net, self.V_net, self.H_dim, self.lw_dim, self.T_net).transpose(0,1)
+            send = gp_coord[:,:,0,:,:].expand( self.V_net, self.V_net, self.H_dim, self.lw_dim, self.T_net).transpose(0,1)
+            if self.directed:
+                receive = gp_coord[:,:,1,:,:].expand( self.V_net, self.V_net, self.H_dim, self.lw_dim, self.T_net)
+            else:
+                receive = gp_coord[:,:,0,:,:].expand( self.V_net, self.V_net, self.H_dim, self.lw_dim, self.T_net)
             Y_linpred += ((send - receive)**2).sum(dim=2).rsqrt().transpose(2,3)
 
         if self.socpop:
-            soc = gp_socpop[:,0,:,:].expand( self.V_net, self.V_net, self.lw_dim, self.T_net)
-            pop = gp_socpop[:,1,:,:].expand( self.V_net, self.V_net, self.lw_dim, self.T_net).transpose(0,1)
+            soc = gp_socpop[:,0,:,:].expand( self.V_net, self.V_net, self.lw_dim, self.T_net).transpose(0,1)
+            pop = gp_socpop[:,1,:,:].expand( self.V_net, self.V_net, self.lw_dim, self.T_net)
             Y_linpred += (soc + pop).transpose(2,3)
 
         ### Sampling 0-1 links ###
@@ -337,13 +340,16 @@ class dmn( Parameterized ):
 
         if self.coord:
             # gp_coord_new_sample.shape # gp_coord_new_sample[v,h,sr_i,lw_i,t,num_particles]
-            send = gp_coord_new_sample[:,:,0,:,:,:].expand( self.V_net, self.V_net, self.H_dim, self.lw_dim, Y_time_new.shape[0], num_particles)
-            receive = gp_coord_new_sample[:,:,1,:,:,:].expand( self.V_net, self.V_net, self.H_dim, self.lw_dim, Y_time_new.shape[0], num_particles).transpose(0,1)
+            send = gp_coord_new_sample[:,:,0,:,:,:].expand( self.V_net, self.V_net, self.H_dim, self.lw_dim, Y_time_new.shape[0], num_particles).transpose(0,1)
+            if self.directed:
+                receive = gp_coord_new_sample[:,:,1,:,:,:].expand( self.V_net, self.V_net, self.H_dim, self.lw_dim, Y_time_new.shape[0], num_particles)
+            else:
+                receive = gp_coord_new_sample[:,:,0,:,:,:].expand( self.V_net, self.V_net, self.H_dim, self.lw_dim, Y_time_new.shape[0], num_particles)
             Y_linpred_new_sample += ((send - receive)**2).sum(dim=2).rsqrt().transpose(2,3)
 
         if self.socpop:
-            soc = gp_socpop_new_sample[:,0,:,:,:].expand( self.V_net, self.V_net, self.lw_dim, Y_time_new.shape[0], num_particles)
-            pop = gp_socpop_new_sample[:,1,:,:,:].expand( self.V_net, self.V_net, self.lw_dim, Y_time_new.shape[0], num_particles).transpose(0,1)
+            soc = gp_socpop_new_sample[:,0,:,:,:].expand( self.V_net, self.V_net, self.lw_dim, Y_time_new.shape[0], num_particles).transpose(0,1)
+            pop = gp_socpop_new_sample[:,1,:,:,:].expand( self.V_net, self.V_net, self.lw_dim, Y_time_new.shape[0], num_particles)
             Y_linpred_new_sample += (soc + pop).transpose(2,3)
 
         # Y_linpred_new_sample.mean(dim=Y_linpred_new_sample.dim()-1)
