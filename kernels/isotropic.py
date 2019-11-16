@@ -1,6 +1,6 @@
 import torch
 from torch.distributions import constraints
-# from torch.nn import Parameter
+from torch.nn import Parameter
 
 from .kernel import Kernel
 
@@ -18,12 +18,12 @@ class Isotropy(Kernel):
         super(Isotropy, self).__init__()
 
         variance = torch.tensor(1.) if variance is None else variance
-        self.variance = variance
+        self.variance = Parameter(variance)
         # self.variance = Parameter(variance)
         # self.set_constraint("variance", constraints.positive)
 
         lengthscale = torch.tensor(1.) if lengthscale is None else lengthscale
-        self.lengthscale = lengthscale
+        self.lengthscale = Parameter(lengthscale)
         # self.lengthscale = Parameter(lengthscale)
         # self.set_constraint("lengthscale", constraints.positive)
 
