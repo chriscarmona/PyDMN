@@ -1,6 +1,6 @@
-import torch.nn as nn
+import pyro
 
-class Mean(nn.Module):
+class Mean(pyro.nn.PyroModule):
     """
     Base class for mean functions used in the Gaussian Process module.
 

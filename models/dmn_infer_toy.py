@@ -32,7 +32,7 @@ class dmn_toy( nn.Module ):
 
     """
 
-    def __init__( self, Y, Y_time, H_dim=3, jitter=1e-3, init_param=False ):
+    def __init__( self, Y, Y_time, H_dim=3, jitter=1e-3, random_kernel=False, init_param=False ):
 
         super(dmn_toy, self).__init__()
 
@@ -40,13 +40,16 @@ class dmn_toy( nn.Module ):
 
         self.jitter = jitter
 
+        self.random_kernel = random_kernel
+
         self.weighted = False
         self.directed = False
         self.coord = True
         self.socpop = False
 
         # Covariance function (kernel) of the GP is defined here
-        self.kernel = pydmn.kernels.RBF(variance=torch.tensor([1.]), lengthscale=torch.tensor([12.]))
+        # self.kernel = pydmn.kernels.RBF( variance=torch.tensor([1.]), lengthscale=torch.tensor([12.]), random_param=random_kernel )
+        self.kernel = pydmn.kernels.RBF( random_param=random_kernel )
 
         Kff = self.kernel(self.Y_time.reshape(-1,1)).detach()
         Kff.view(-1)[::self.T_net + 1] += self.jitter  # add jitter to the diagonal
@@ -58,6 +61,9 @@ class dmn_toy( nn.Module ):
         # self.gp_mean_sigma = torch.ones((self.V_net,self.H_dim))
         self.gp_loc = torch.zeros((self.V_net,self.H_dim,self.T_net))
         self.gp_cov_tril = self.Lff_0.expand((self.V_net,self.H_dim,self.T_net,self.T_net))
+
+        if self.random_kernel:
+            self.kernel_param = torch.ones((2,2))
 
         if init_param:
             self.init_guide()
@@ -137,6 +143,11 @@ class dmn_toy( nn.Module ):
 
     def guide(self):
 
+        if self.random_kernel:
+            self.kernel_param = pyro.param("kernel_param", torch.ones((2,2)), constraint=constraints.positive)
+            pyro.sample( "lengthscale", dist.InverseGamma( self.kernel_param[0,0], self.kernel_param[0,1] ) )
+            pyro.sample( "variance", dist.InverseGamma( self.kernel_param[1,0], self.kernel_param[1,1] ) )
+
         self.gp_loc = pyro.param( f"gp_loc", self.gp_loc_init )
 
         for v in range( self.V_net ):
@@ -151,7 +162,7 @@ class dmn_toy( nn.Module ):
                 self.gp_cov_tril[v,h,:,:] = pyro.param( f"gp_cov_tril_{v}_{h}", self.Lff_0,
                                                 constraint=constraints.lower_cholesky )
 
-        with pyro.plate('latent_coord_all', self.V_net*self.H_dim ):
+        with pyro.plate("latent_coord_all", self.V_net*self.H_dim ):
             pyro.sample( f"latent_coord",
                                     dist.MultivariateNormal( self.gp_loc.reshape(self.V_net * self.H_dim, self.T_net),
                                                             # scale_tril=self.Lff ) )

@@ -1,6 +1,9 @@
 import torch
-# from torch.distributions import constraints
-from torch.nn import Parameter
+from torch.distributions import constraints
+# from torch.nn import Parameter
+
+import pyro
+import pyro.distributions as dist
 
 # import pyro
 
@@ -16,18 +19,24 @@ class Isotropy(Kernel):
 
     :param torch.Tensor lengthscale: Length-scale parameter of this kernel.
     """
-    def __init__(self, variance=None, lengthscale=None):
+    def __init__(self, variance=None, lengthscale=None, random_param=False):
         super(Isotropy, self).__init__()
 
-        variance = torch.tensor(1.) if variance is None else variance
-        self.variance = Parameter(variance)
-        # self.variance = Parameter(variance)
-        # self.set_constraint("variance", constraints.positive)
+        self.random_param = random_param
+        # Set lengthscale parameter
+        if random_param:
+            self.lengthscale = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([3.]),torch.tensor([36.])) )
+        else:
+            lengthscale = torch.tensor(1.) if lengthscale is None else lengthscale
+            self.lengthscale = pyro.param("lengthscale", lengthscale, constraint=constraints.greater_than(0) )
 
-        lengthscale = torch.tensor(1.) if lengthscale is None else lengthscale
-        self.lengthscale = Parameter(lengthscale)
-        # self.lengthscale = Parameter(lengthscale)
-        # self.set_constraint("lengthscale", constraints.positive)
+        # Set variance parameter
+        if random_param:
+            self.variance = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([5.]),torch.tensor([5.])) )
+        else:
+            variance = torch.tensor(1.) if variance is None else variance
+            self.variance = pyro.param("variance", variance, constraint=constraints.positive)
+
 
     def _square_scaled_dist(self, X, Z=None):
         r"""
@@ -38,8 +47,9 @@ class Isotropy(Kernel):
         if X.size != Z.size:
             raise ValueError("Inputs must have the same number of features.")
 
-        scaled_X = X / self.lengthscale
-        scaled_Z = Z / self.lengthscale
+        lengthscale = self.lengthscale
+        scaled_X = X / lengthscale
+        scaled_Z = Z / lengthscale
         X2 = (scaled_X ** 2).sum(1, keepdim=True)
         Z2 = (scaled_Z ** 2).sum(1, keepdim=True)
         XZ = scaled_X.matmul(scaled_Z.t())
@@ -55,9 +65,10 @@ class RBF(Isotropy):
 
     .. note:: This kernel also has name `Squared Exponential` in literature.
     """
-    def __init__(self, variance=None, lengthscale=None):
-        super(RBF, self).__init__(variance, lengthscale)
+    def __init__(self, variance=None, lengthscale=None, random_param=False):
+        super(RBF, self).__init__(variance=variance, lengthscale=lengthscale, random_param=random_param)
 
     def forward(self, X, Z=None):
+        variance = self.variance
         r2 = self._square_scaled_dist(X, Z)
-        return self.variance * torch.exp(-0.5 * r2)
+        return variance * torch.exp(-0.5 * r2)
