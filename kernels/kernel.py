@@ -21,7 +21,7 @@ class Kernel(pyro.nn.PyroModule):
         super(Kernel, self).__init__()
 
 
-    def forward(self, X, Z=None, diag=False):
+    def forward(self, X, Z=None):
         r"""
         Calculates covariance matrix of inputs on active dimensionals.
 

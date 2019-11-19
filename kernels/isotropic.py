@@ -28,7 +28,7 @@ class Isotropy(Kernel):
             self.lengthscale = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([3.]),torch.tensor([36.])) )
         else:
             lengthscale = torch.tensor(1.) if lengthscale is None else lengthscale
-            self.lengthscale = pyro.param("lengthscale", lengthscale, constraint=constraints.greater_than(0) )
+            self.lengthscale = pyro.param("lengthscale", lengthscale, constraint=constraints.greater_than(1) )
 
         # Set variance parameter
         if random_param:
@@ -47,9 +47,8 @@ class Isotropy(Kernel):
         if X.size != Z.size:
             raise ValueError("Inputs must have the same number of features.")
 
-        lengthscale = self.lengthscale
-        scaled_X = X / lengthscale
-        scaled_Z = Z / lengthscale
+        scaled_X = X / self.lengthscale
+        scaled_Z = Z / self.lengthscale
         X2 = (scaled_X ** 2).sum(1, keepdim=True)
         Z2 = (scaled_Z ** 2).sum(1, keepdim=True)
         XZ = scaled_X.matmul(scaled_Z.t())
@@ -69,6 +68,5 @@ class RBF(Isotropy):
         super(RBF, self).__init__(variance=variance, lengthscale=lengthscale, random_param=random_param)
 
     def forward(self, X, Z=None):
-        variance = self.variance
         r2 = self._square_scaled_dist(X, Z)
-        return variance * torch.exp(-0.5 * r2)
+        return self.variance * torch.exp(-0.5 * r2)
