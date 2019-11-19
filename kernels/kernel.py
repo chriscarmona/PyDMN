@@ -1,6 +1,6 @@
-import torch.nn as nn
+import pyro
 
-class Kernel(nn.Module):
+class Kernel(pyro.nn.PyroModule):
     """
     Base class for kernels used in this Gaussian Process module.
 
@@ -14,7 +14,7 @@ class Kernel(nn.Module):
 
     [1] `Gaussian Processes for Machine Learning`,
     Carl E. Rasmussen, Christopher K. I. Williams
-    
+
     """
 
     def __init__(self):

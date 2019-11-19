@@ -1,6 +1,8 @@
 import torch
-from torch.distributions import constraints
+# from torch.distributions import constraints
 from torch.nn import Parameter
+
+# import pyro
 
 from .kernel import Kernel
 
