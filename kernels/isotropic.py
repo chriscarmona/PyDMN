@@ -17,33 +17,19 @@ class Isotropy(Kernel):
 
     :param torch.Tensor lengthscale: Length-scale parameter of this kernel.
     """
-    def __init__(self, variance=None, lengthscale=None, random_param=False):
+    def __init__(self, variance=None, lengthscale=None):
         super(Isotropy, self).__init__()
 
-        self.random_param = random_param
-
-        # # Visualize InverseGamma
-        # import matplotlib.pyplot as plt
-        # x = torch.linspace(0.,3.,101)
-        # plt.plot(x,dist.InverseGamma(torch.tensor([11.]),torch.tensor([10.])).log_prob(x).exp())
-        # plt.plot(x,dist.Gamma(torch.tensor([10.]),torch.tensor([10.])).log_prob(x).exp())
-
         # Set lengthscale parameter
-        if random_param:
-            self.lengthscale = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([4.]),torch.tensor([30.])) )
-        else:
-            lengthscale = torch.tensor(10.) if lengthscale is None else lengthscale
-            self.lengthscale = pyro.param("lengthscale", lengthscale, constraint=constraints.greater_than(1) )
+        lengthscale = torch.tensor(10.) if lengthscale is None else lengthscale
+        self.lengthscale = pyro.param( "lengthscale", lengthscale, constraint=constraints.greater_than(7) )
 
         # Set variance parameter
-        if random_param:
-            self.variance = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([11.]),torch.tensor([10.])) )
-        else:
-            variance = torch.tensor(1.) if variance is None else variance
-            self.variance = pyro.param("variance", variance, constraint=constraints.positive)
+        variance = torch.tensor(1.) if variance is None else variance
+        self.variance = pyro.param( "variance", variance, constraint=constraints.positive)
 
 
-    def _square_scaled_dist(self, X, Z=None):
+    def _square_scaled_dist(self, X, Z=None ):
         r"""
         Returns :math:`\|\frac{X-Z}{l}\|^2`.
         """
@@ -69,9 +55,10 @@ class RBF(Isotropy):
 
     .. note:: This kernel also has name `Squared Exponential` in literature.
     """
-    def __init__(self, variance=None, lengthscale=None, random_param=False):
-        super(RBF, self).__init__(variance=variance, lengthscale=lengthscale, random_param=random_param)
+    def __init__(self, variance=None, lengthscale=None):
+        super(RBF, self).__init__(variance=variance, lengthscale=lengthscale)
 
     def forward(self, X, Z=None):
+
         r2 = self._square_scaled_dist(X, Z)
         return self.variance * torch.exp(-0.5 * r2)
