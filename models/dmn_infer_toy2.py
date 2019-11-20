@@ -57,13 +57,10 @@ class dmn_toy2( pyro.nn.PyroModule ):
 
         if self.random_kernel:
             self.kernel_param = torch.ones((2,2))
-
-        self.kernel = pydmn.kernels.RBF( random_param=self.random_kernel )
-
+        
     def model(self):
 
-        # self.kernel = pyro.module('kernel',self.kernel)
-
+        self.kernel = pydmn.kernels.RBF( random_param=self.random_kernel )
 
         # Covariance matrix of observed times entailed by our kernel
         Kff = self.kernel(self.Y_time.reshape(-1,1))

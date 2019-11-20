@@ -32,7 +32,7 @@ class Isotropy(Kernel):
         if random_param:
             self.lengthscale = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([4.]),torch.tensor([30.])) )
         else:
-            lengthscale = torch.tensor(1.) if lengthscale is None else lengthscale
+            lengthscale = torch.tensor(10.) if lengthscale is None else lengthscale
             self.lengthscale = pyro.param("lengthscale", lengthscale, constraint=constraints.greater_than(1) )
 
         # Set variance parameter
