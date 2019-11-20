@@ -5,8 +5,6 @@ from torch.distributions import constraints
 import pyro
 import pyro.distributions as dist
 
-# import pyro
-
 from .kernel import Kernel
 
 class Isotropy(Kernel):
@@ -23,16 +21,23 @@ class Isotropy(Kernel):
         super(Isotropy, self).__init__()
 
         self.random_param = random_param
+
+        # # Visualize InverseGamma
+        # import matplotlib.pyplot as plt
+        # x = torch.linspace(0.,3.,101)
+        # plt.plot(x,dist.InverseGamma(torch.tensor([11.]),torch.tensor([10.])).log_prob(x).exp())
+        # plt.plot(x,dist.Gamma(torch.tensor([10.]),torch.tensor([10.])).log_prob(x).exp())
+
         # Set lengthscale parameter
         if random_param:
-            self.lengthscale = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([3.]),torch.tensor([36.])) )
+            self.lengthscale = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([4.]),torch.tensor([30.])) )
         else:
             lengthscale = torch.tensor(1.) if lengthscale is None else lengthscale
             self.lengthscale = pyro.param("lengthscale", lengthscale, constraint=constraints.greater_than(1) )
 
         # Set variance parameter
         if random_param:
-            self.variance = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([5.]),torch.tensor([5.])) )
+            self.variance = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([11.]),torch.tensor([10.])) )
         else:
             variance = torch.tensor(1.) if variance is None else variance
             self.variance = pyro.param("variance", variance, constraint=constraints.positive)
