@@ -21,8 +21,8 @@ class Isotropy(Kernel):
         super(Isotropy, self).__init__()
 
         # Set lengthscale parameter
-        lengthscale = torch.tensor(10.) if lengthscale is None else lengthscale
-        self.lengthscale = pyro.param( "lengthscale", lengthscale, constraint=constraints.greater_than(7) )
+        lengthscale = torch.tensor(1.) if lengthscale is None else lengthscale
+        self.lengthscale = pyro.param( "lengthscale", lengthscale, constraint=constraints.positive )
 
         # Set variance parameter
         variance = torch.tensor(1.) if variance is None else variance

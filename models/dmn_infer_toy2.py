@@ -30,7 +30,7 @@ class dmn_toy2( pyro.nn.PyroModule ):
 
     """
 
-    def __init__( self, Y, Y_time, directed=False, H_dim=3, random_kernel=False, jitter=1e-3 ):
+    def __init__( self, Y, Y_time, directed=False, H_dim=3, random_kernel=False, jitter=1e-3, init_mcmc=False ):
 
         super(dmn_toy2, self).__init__()
 
@@ -60,13 +60,25 @@ class dmn_toy2( pyro.nn.PyroModule ):
         # If the Kernel IS random, we use PyroSample
         if self.random_kernel:
             self.kernel = pydmn.kernels.RBF()
-            self.kernel.lengthscale = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([4.]),torch.tensor([30.])) )
-            self.kernel.variance = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([11.]),torch.tensor([10.])) )
+            self.kernel.lengthscale = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([51.]),torch.tensor([100.])) )
+            self.kernel.variance = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([51.]),torch.tensor([50.])) )
+
             # # Visualize InverseGamma
             # import matplotlib.pyplot as plt
-            # x = torch.linspace(0.,3.,101)
-            # plt.plot(x,dist.InverseGamma(torch.tensor([11.]),torch.tensor([10.])).log_prob(x).exp())
-            # plt.plot(x,dist.Gamma(torch.tensor([10.]),torch.tensor([10.])).log_prob(x).exp())
+            # x = torch.linspace(0.,5.,101)[1:]
+            # plt.plot(x,dist.InverseGamma(torch.tensor([51.]),torch.tensor([100.])).log_prob(x).exp())
+            # plt.plot(x,dist.Gamma(torch.tensor([50.]),torch.tensor([50.])).log_prob(x).exp())
+
+        # Initial GP covariance, just to initialize random coordinates
+        Kff = pydmn.kernels.RBF()(self.Y_time.reshape(-1,1)).detach()
+        Kff.view(-1)[::self.T_net + 1] += self.jitter  # add jitter to the diagonal
+        self.Lff_ini = Kff.cholesky() # cholesky lower triangular
+
+        if init_mcmc:
+            self.gp_mean_ini, self.gp_coord_demean_ini = self.init_guide()
+        else:
+            self.gp_mean_ini = torch.zeros( (self.V_net,self.H_dim,self.n_dir) )
+            self.gp_coord_demean_ini = torch.zeros( (self.V_net,self.H_dim,self.n_dir, self.T_net) )
 
     def model(self):
 
@@ -83,10 +95,11 @@ class dmn_toy2( pyro.nn.PyroModule ):
         with pyro.plate('gp_coord_all', self.V_net*self.H_dim*self.n_dir ):
             # Mean function of the GPs
             gp_mean = pyro.sample( "gp_mean",
-                                    dist.Normal( torch.zeros((self.V_net*self.H_dim*self.n_dir)), torch.tensor([0.5]) ) )
+                                    dist.Normal( torch.zeros( (self.V_net*self.H_dim*self.n_dir) ),
+                                                torch.tensor([0.1]) ) )
             # Demeaned GPs
             gp_coord_demean = pyro.sample( "gp_coord_demean",
-                                            dist.MultivariateNormal( torch.zeros( self.V_net * self.H_dim*self.n_dir, self.T_net ),
+                                            dist.MultivariateNormal( torch.zeros( (self.V_net*self.H_dim*self.n_dir, self.T_net) ),
                                                                         scale_tril=Lff ) )
 
         gp_mean = gp_mean.reshape(self.V_net,self.H_dim,self.n_dir)
@@ -110,16 +123,16 @@ class dmn_toy2( pyro.nn.PyroModule ):
 
         # Posterior Covariance of the GP
         if self.random_kernel:
-            self.kernel_param = pyro.param("kernel_param", torch.ones((2,2)), constraint=constraints.positive)
+            self.kernel_param = pyro.param("kernel_param", 50*torch.ones((2,2)), constraint=constraints.positive)
             pyro.sample( "kernel.lengthscale", dist.InverseGamma( self.kernel_param[0,0], self.kernel_param[0,1] ) )
             pyro.sample( "kernel.variance", dist.InverseGamma( self.kernel_param[1,0], self.kernel_param[1,1] ) )
 
         # Sampling coordinates #
-        self.gp_mean_loc = pyro.param("gp_mean_loc", torch.zeros((self.V_net,self.H_dim,self.n_dir)))
-        self.gp_mean_scale = pyro.param("gp_mean_scale", torch.ones((self.V_net,self.H_dim,self.n_dir)), constraint=constraints.positive)
-        self.gp_coord_demean = pyro.param( f"gp_coord_demean_loc", torch.zeros((self.V_net,self.H_dim,self.n_dir,self.T_net)) )
+        self.gp_mean_loc = pyro.param("gp_mean_loc", self.gp_mean_ini )
+        self.gp_mean_scale = pyro.param("gp_mean_scale", 0.1*torch.ones((self.V_net,self.H_dim,self.n_dir)), constraint=constraints.positive)
+        self.gp_coord_demean = pyro.param( f"gp_coord_demean_loc", self.gp_coord_demean_ini )
         # Posterior Covariance of the GP
-        self.gp_cov_tril = pyro.param( "gp_cov_tril", torch.eye(self.T_net).expand(self.V_net,self.H_dim,self.n_dir,self.T_net,self.T_net),
+        self.gp_cov_tril = pyro.param( "gp_cov_tril", self.Lff_ini.expand(self.V_net,self.H_dim,self.n_dir,self.T_net,self.T_net),
                                         constraint=constraints.lower_cholesky )
         with pyro.plate('gp_coord_all', self.V_net*self.H_dim*self.n_dir ):
             # Posterior GP (mean function params) #
@@ -202,14 +215,22 @@ class dmn_toy2( pyro.nn.PyroModule ):
     def init_guide(self):
         nuts_kernel = NUTS(self.model)
 
-        mcmc = MCMC(nuts_kernel, num_samples=1, warmup_steps=30)
+        num_samples=3
+        mcmc = MCMC(nuts_kernel, num_samples=num_samples, warmup_steps=7)
         mcmc.run()
 
         hmc_samples = {k: v.detach().cpu().numpy() for k, v in mcmc.get_samples().items()}
 
-        # Get latent coordinates from mcmc #
-        gp_coord_mcmc = np.array([[hmc_samples[f'latent_coord_{v}_{h}'] for h in range(self.H_dim)] for v in range(self.V_net)]).transpose(0,1,3,2)
-        self.gp_coord_mcmc = torch.from_numpy(gp_coord_mcmc)
+        # Get latent coordinates samples from mcmc #
+        gp_mean = torch.tensor(hmc_samples['gp_mean']).reshape(num_samples,self.V_net,self.H_dim,self.n_dir)
+        gp_coord_demean = torch.tensor(hmc_samples[f'gp_coord_demean']).reshape(num_samples,self.V_net, self.H_dim, self.n_dir, self.T_net)
+        # keep only last sample
+        gp_mean_ini = gp_mean[num_samples-1]
+        gp_coord_demean_ini = gp_coord_demean[num_samples-1]
+
+        return (gp_mean_ini,gp_coord_demean_ini)
+        # gp_coord = gp_mean.expand(self.T_net, self.V_net, self.H_dim, self.n_dir).permute(1,2,3,0) + gp_coord_demean
+
         # # Get probabilities from mcmc #
         # Y_linpred_mcmc = torch.einsum('vhtm,whtm->vwtm', gp_coord_mcmc, gp_coord_mcmc)
         # Y_link_prob_mcmc = torch.sigmoid(Y_linpred_mcmc)
