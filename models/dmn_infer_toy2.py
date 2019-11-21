@@ -60,8 +60,8 @@ class dmn_toy2( pyro.nn.PyroModule ):
         # If the Kernel IS random, we use PyroSample
         if self.random_kernel:
             self.kernel = pydmn.kernels.RBF()
-            self.kernel.lengthscale = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([51.]),torch.tensor([100.])) )
-            self.kernel.variance = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([51.]),torch.tensor([50.])) )
+            # self.kernel.lengthscale = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([51.]),torch.tensor([100.])) )
+            # self.kernel.variance = pyro.nn.PyroSample( dist.InverseGamma(torch.tensor([51.]),torch.tensor([50.])) )
 
             # # Visualize InverseGamma
             # import matplotlib.pyplot as plt
@@ -87,10 +87,10 @@ class dmn_toy2( pyro.nn.PyroModule ):
             self.kernel = pydmn.kernels.RBF()
 
         # Covariance matrix of observed times entailed by our kernel
-        Kff = self.kernel(self.Y_time.reshape(-1,1))
-        Kff.view(-1)[::self.T_net + 1] += self.jitter  # add jitter to the diagonal
-        Lff = Kff.cholesky() # cholesky lower triangular
-
+        # Kff = self.kernel(self.Y_time.reshape(-1,1))
+        # Kff.view(-1)[::self.T_net + 1] += self.jitter  # add jitter to the diagonal
+        # Lff = Kff.cholesky() # cholesky lower triangular
+        Lff = self.Lff_ini
         # Sampling latent coordinates #
         with pyro.plate('gp_coord_all', self.V_net*self.H_dim*self.n_dir ):
             # Mean function of the GPs
@@ -122,10 +122,10 @@ class dmn_toy2( pyro.nn.PyroModule ):
     def guide(self):
 
         # Posterior Covariance of the GP
-        if self.random_kernel:
-            self.kernel_param = pyro.param("kernel_param", 50*torch.ones((2,2)), constraint=constraints.positive)
-            pyro.sample( "kernel.lengthscale", dist.InverseGamma( self.kernel_param[0,0], self.kernel_param[0,1] ) )
-            pyro.sample( "kernel.variance", dist.InverseGamma( self.kernel_param[1,0], self.kernel_param[1,1] ) )
+        # if self.random_kernel:
+        #     self.kernel_param = pyro.param("kernel_param", 50*torch.ones((2,2)), constraint=constraints.positive)
+        #     pyro.sample( "kernel.lengthscale", dist.InverseGamma( self.kernel_param[0,0], self.kernel_param[0,1] ) )
+        #     pyro.sample( "kernel.variance", dist.InverseGamma( self.kernel_param[1,0], self.kernel_param[1,1] ) )
 
         # Sampling coordinates #
         self.gp_mean_loc = pyro.param("gp_mean_loc", self.gp_mean_ini )
