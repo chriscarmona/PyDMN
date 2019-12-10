@@ -35,6 +35,7 @@ class dmn_toy( pyro.nn.PyroModule ):
         super(dmn_toy, self).__init__()
 
         Y, [all_nodes, Y_time, all_layers] = pydmn.util.edgelist_to_tensor( edgelist = edgelist )
+        self.all_layers = all_layers
 
         self.set_data(Y=Y, Y_time=Y_time, H_dim=H_dim )
 

@@ -30,11 +30,14 @@ class dmn( Parameterized ):
 
     """
 
-    def __init__( self, Y, Y_time, H_dim=3, X=None,
+    def __init__( self, edgelist, H_dim=3, X=None,
                  weighted=True, directed=True, coord=False, socpop=True,
                  jitter=1e-6, whiten=False ):
 
         super(dmn, self).__init__()
+
+        Y, [all_nodes, Y_time, all_layers] = pydmn.util.edgelist_to_tensor( edgelist = edgelist )
+        self.all_layers = all_layers
 
         self.set_data(Y=Y, Y_time=Y_time, H_dim=H_dim, X=X )
         self.whiten = whiten

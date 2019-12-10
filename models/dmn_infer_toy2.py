@@ -30,7 +30,7 @@ class dmn_toy2( pyro.nn.PyroModule ):
 
     """
 
-    def __init__( self, Y, Y_time, directed=False, H_dim=3, random_kernel=False, jitter=1e-3, init_mcmc=False ):
+    def __init__( self, edgelist, directed=False, H_dim=3, random_kernel=False, jitter=1e-3, init_mcmc=False ):
 
         super(dmn_toy2, self).__init__()
 
@@ -39,6 +39,9 @@ class dmn_toy2( pyro.nn.PyroModule ):
         self.coord = True
         self.socpop = False
 
+        Y, [all_nodes, Y_time, all_layers] = pydmn.util.edgelist_to_tensor( edgelist = edgelist )
+        self.all_layers = all_layers
+        
         self.set_data(Y=Y, Y_time=Y_time, H_dim=H_dim )
 
         self.random_kernel = random_kernel
