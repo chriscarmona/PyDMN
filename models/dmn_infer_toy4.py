@@ -11,7 +11,7 @@ from pyro.infer.mcmc import NUTS
 import PyDMN as pydmn
 
 # define a PyTorch module for the DMN
-class dmn_toy3( pyro.nn.PyroModule ):
+class dmn_toy4( pyro.nn.PyroModule ):
     # this is equivalent to
     # pyro.contrib.gp.models.model.GPModel
     r"""
@@ -30,9 +30,9 @@ class dmn_toy3( pyro.nn.PyroModule ):
 
     """
 
-    def __init__( self, edgelist, directed=False, weighted=False, coord = True, socpop = False, H_dim=3, sigma_k_prior_param=None, random_kernel=False, jitter=1e-3, init_mcmc=False ):
+    def __init__( self, edgelist, directed=False, weighted=False, coord=True, socpop=True, H_dim=3, sigma_k_prior_param=None, random_kernel=False, jitter=1e-3, init_mcmc=False ):
 
-        super(dmn_toy3, self).__init__()
+        super(dmn_toy4, self).__init__()
 
         self.directed = directed
         self.weighted = weighted
@@ -71,10 +71,20 @@ class dmn_toy3( pyro.nn.PyroModule ):
 
         ### Variational Parameters ###
         # To be set inside the guide
+        self.gp_system_mean_loc = None
+        self.gp_system_mean_scale = None
+        self.gp_system_demean = None
+        self.gp_system_cov_tril = None
+
         self.gp_coord_mean_loc = None
         self.gp_coord_mean_scale = None
         self.gp_coord_demean = None
-        self.gp_cov_tril = None
+        self.gp_coord_cov_tril = None
+
+        self.gp_socpop_mean_loc = None
+        self.gp_socpop_mean_scale = None
+        self.gp_socpop_demean = None
+        self.gp_socpop_cov_tril = None
 
         if self.random_kernel:
             # If we optimise the parameters in the kernel, they will be stored here
@@ -98,12 +108,18 @@ class dmn_toy3( pyro.nn.PyroModule ):
         self.Lff_ini = Kff.cholesky() # cholesky lower triangular
 
         if init_mcmc:
-            self.gp_system_mean_ini, self.gp_system_demean_ini, self.gp_coord_mean_ini, self.gp_coord_demean_ini = self.init_guide()
+            (self.gp_system_mean_ini, self.gp_system_demean_ini,
+            self.gp_coord_mean_ini, self.gp_coord_demean_ini,
+            self.gp_socpop_mean_ini, self.gp_socpop_demean_ini) = self.init_guide()
         else:
             self.gp_system_mean_ini = torch.zeros( (self.K_net,self.n_w) )
             self.gp_system_demean_ini = torch.zeros( (self.K_net,self.n_w,self.T_net) )
-            self.gp_coord_mean_ini = torch.zeros( (self.V_net,self.H_dim,self.K_net,self.n_dir,self.n_w) )
-            self.gp_coord_demean_ini = torch.zeros( (self.V_net,self.H_dim,self.K_net,self.n_dir,self.n_w,self.T_net) )
+            if self.coord:
+                self.gp_coord_mean_ini = torch.zeros( (self.V_net,self.H_dim,self.K_net,self.n_dir,self.n_w) )
+                self.gp_coord_demean_ini = torch.zeros( (self.V_net,self.H_dim,self.K_net,self.n_dir,self.n_w,self.T_net) )
+            if self.socpop:
+                self.gp_socpop_mean_ini = torch.zeros( (self.V_net,self.K_net,self.n_dir,self.n_w) )
+                self.gp_socpop_demean_ini = torch.zeros( (self.V_net,self.K_net,self.n_dir,self.n_w,self.T_net) )
 
     def model(self):
 
@@ -117,7 +133,7 @@ class dmn_toy3( pyro.nn.PyroModule ):
         # Lff = Kff.cholesky() # cholesky lower triangular
         Lff = self.Lff_ini
 
-        # Sampling system-wide connectivity and average weights #
+        ## Sampling system-wide connectivity and average weights ##
         with pyro.plate('gp_system_all', self.K_net*self.n_w ):
             # Mean function of the GPs
             gp_system_mean = pyro.sample( "gp_system_mean",
@@ -132,28 +148,51 @@ class dmn_toy3( pyro.nn.PyroModule ):
         # Latent systemic evolution
         gp_system = gp_system_mean.expand(self.T_net, self.K_net, self.n_w).permute(1,2,0) + gp_system_demean
 
-        # Sampling latent coordinates #
-        with pyro.plate('gp_coord_all', self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w ):
-            # Mean function of the GPs
-            gp_coord_mean = pyro.sample( "gp_coord_mean",
-                                    dist.Normal( torch.zeros( (self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w) ),
-                                                torch.tensor([0.1]) ) )
-            # Demeaned GPs
-            gp_coord_demean = pyro.sample( "gp_coord_demean",
-                                            dist.MultivariateNormal( torch.zeros( (self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w, self.T_net) ),
-                                                                        scale_tril=Lff ) )
+        ## Sampling latent coordinates ##
+        if self.coord:
+            with pyro.plate('gp_coord_all', self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w ):
+                # Mean function of the GPs
+                gp_coord_mean = pyro.sample( "gp_coord_mean",
+                                        dist.Normal( torch.zeros( (self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w) ),
+                                                    torch.tensor([0.1]) ) )
+                # Demeaned GPs
+                gp_coord_demean = pyro.sample( "gp_coord_demean",
+                                                dist.MultivariateNormal( torch.zeros( (self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w, self.T_net) ),
+                                                                            scale_tril=Lff ) )
 
-        gp_coord_mean = gp_coord_mean.reshape(self.V_net,self.H_dim,self.K_net,self.n_dir,self.n_w)
-        gp_coord_demean = gp_coord_demean.reshape(self.V_net, self.H_dim, self.K_net, self.n_dir, self.n_w, self.T_net)
+            gp_coord_mean = gp_coord_mean.reshape(self.V_net,self.H_dim,self.K_net,self.n_dir,self.n_w)
+            gp_coord_demean = gp_coord_demean.reshape(self.V_net, self.H_dim, self.K_net, self.n_dir, self.n_w, self.T_net)
+            # Latent coordinates
+            gp_coord = gp_coord_mean.expand(self.T_net, self.V_net, self.H_dim, self.K_net, self.n_dir, self.n_w).permute(1,2,3,4,5,0) + gp_coord_demean
 
-        # Latent coordinates
-        gp_coord = gp_coord_mean.expand(self.T_net, self.V_net, self.H_dim, self.K_net, self.n_dir, self.n_w).permute(1,2,3,4,5,0) + gp_coord_demean
+        ## Sampling Sociability and Popularity terms ##
+        if self.socpop:
+            with pyro.plate('gp_socpop_all', self.V_net*self.K_net*self.n_dir*self.n_w ):
+                # Mean function of the GPs
+                gp_socpop_mean = pyro.sample( "gp_socpop_mean",
+                                        dist.Normal( torch.zeros( (self.V_net*self.K_net*self.n_dir*self.n_w) ),
+                                                    torch.tensor([0.1]) ) )
+                # Demeaned GPs
+                gp_socpop_demean = pyro.sample( "gp_socpop_demean",
+                                                dist.MultivariateNormal( torch.zeros( (self.V_net*self.K_net*self.n_dir*self.n_w, self.T_net) ),
+                                                                            scale_tril=Lff ) )
+
+            gp_socpop_mean = gp_socpop_mean.reshape(self.V_net,self.K_net,self.n_dir,self.n_w)
+            gp_socpop_demean = gp_socpop_demean.reshape(self.V_net, self.K_net, self.n_dir, self.n_w, self.T_net)
+            # Latent coordinates
+            gp_socpop = gp_socpop_mean.expand(self.T_net, self.V_net, self.K_net, self.n_dir, self.n_w).permute(1,2,3,4,0) + gp_socpop_demean
 
         ### Linear Predictor ###
         # Systemic component
         Y_linpred = gp_system.expand(self.V_net, self.V_net, self.K_net, self.n_w, self.T_net).permute(0,1,4,2,3)
-        # distance between agents
-        Y_linpred = Y_linpred + torch.einsum('uhkwt,vhkwt->uvtkw', gp_coord[:,:,:,0,:,:], gp_coord[:,:,:,self.n_dir-1,:,:])
+        # Distance between agents
+        if self.coord:
+            Y_linpred = Y_linpred + torch.einsum('uhkwt,vhkwt->uvtkw', gp_coord[:,:,:,0,:,:], gp_coord[:,:,:,self.n_dir-1,:,:])
+        # Sociability and Popularity effects
+        if self.socpop:
+            gp_soc = gp_socpop[:,:,0,:,:].expand(self.V_net, self.V_net, self.K_net, self.n_w, self.T_net).transpose(0,1)
+            gp_pop = gp_socpop[:,:,self.n_dir-1,:,:].expand(self.V_net, self.V_net, self.K_net, self.n_w,self.T_net)
+            Y_linpred = Y_linpred + gp_soc.permute(0,1,4,2,3) + gp_pop.permute(0,1,4,2,3)
 
         ### Link propensity (probability of occur) ###
         Y_link_prob = torch.sigmoid(Y_linpred[:,:,:,:,0])
@@ -200,20 +239,38 @@ class dmn_toy3( pyro.nn.PyroModule ):
                                                             scale_tril=self.gp_system_cov_tril.reshape(self.K_net*self.n_w , self.T_net, self.T_net) ) )
 
         # Sampling coordinates #
-        self.gp_coord_mean_loc = pyro.param("gp_coord_mean_loc", self.gp_coord_mean_ini )
-        self.gp_coord_mean_scale = pyro.param("gp_coord_mean_scale", 0.1*torch.ones((self.V_net,self.H_dim,self.K_net,self.n_dir,self.n_w)), constraint=constraints.positive)
-        self.gp_coord_demean = pyro.param( f"gp_coord_demean_loc", self.gp_coord_demean_ini )
-        # Posterior Covariance of the GP
-        self.gp_cov_tril = pyro.param( "gp_cov_tril", self.Lff_ini.expand(self.V_net,self.H_dim,self.K_net,self.n_dir,self.n_w,self.T_net,self.T_net),
-                                        constraint=constraints.lower_cholesky )
-        with pyro.plate('gp_coord_all', self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w ):
-            # Posterior GP (mean function params) #
-            pyro.sample( "gp_coord_mean", dist.Normal( self.gp_coord_mean_loc.reshape(self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w),
-                                                self.gp_coord_mean_scale.reshape(self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w) ) )
-            # Posterior GP (demeaned) #
-            pyro.sample( f"gp_coord_demean",
-                                    dist.MultivariateNormal( self.gp_coord_demean.reshape(self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w , self.T_net),
-                                                            scale_tril=self.gp_cov_tril.reshape(self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w , self.T_net, self.T_net) ) )
+        if self.coord:
+            self.gp_coord_mean_loc = pyro.param("gp_coord_mean_loc", self.gp_coord_mean_ini )
+            self.gp_coord_mean_scale = pyro.param("gp_coord_mean_scale", 0.1*torch.ones((self.V_net,self.H_dim,self.K_net,self.n_dir,self.n_w)), constraint=constraints.positive)
+            self.gp_coord_demean = pyro.param( f"gp_coord_demean_loc", self.gp_coord_demean_ini )
+            # Posterior Covariance of the GP
+            self.gp_coord_cov_tril = pyro.param( "gp_coord_cov_tril", self.Lff_ini.expand(self.V_net,self.H_dim,self.K_net,self.n_dir,self.n_w,self.T_net,self.T_net),
+                                            constraint=constraints.lower_cholesky )
+            with pyro.plate('gp_coord_all', self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w ):
+                # Posterior GP (mean function params) #
+                pyro.sample( "gp_coord_mean", dist.Normal( self.gp_coord_mean_loc.reshape(self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w),
+                                                    self.gp_coord_mean_scale.reshape(self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w) ) )
+                # Posterior GP (demeaned) #
+                pyro.sample( f"gp_coord_demean",
+                                        dist.MultivariateNormal( self.gp_coord_demean.reshape(self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w , self.T_net),
+                                                                scale_tril=self.gp_coord_cov_tril.reshape(self.V_net*self.H_dim*self.K_net*self.n_dir*self.n_w , self.T_net, self.T_net) ) )
+
+        # Sampling sociability and popularity #
+        if self.socpop:
+            self.gp_socpop_mean_loc = pyro.param("gp_socpop_mean_loc", self.gp_socpop_mean_ini )
+            self.gp_socpop_mean_scale = pyro.param("gp_socpop_mean_scale", 0.1*torch.ones((self.V_net,self.K_net,self.n_dir,self.n_w)), constraint=constraints.positive)
+            self.gp_socpop_demean = pyro.param( f"gp_socpop_demean_loc", self.gp_socpop_demean_ini )
+            # Posterior Covariance of the GP
+            self.gp_socpop_cov_tril = pyro.param( "gp_socpop_cov_tril", self.Lff_ini.expand(self.V_net,self.K_net,self.n_dir,self.n_w,self.T_net,self.T_net),
+                                            constraint=constraints.lower_cholesky )
+            with pyro.plate('gp_socpop_all', self.V_net*self.K_net*self.n_dir*self.n_w ):
+                # Posterior GP (mean function params) #
+                pyro.sample( "gp_socpop_mean", dist.Normal( self.gp_socpop_mean_loc.reshape(self.V_net*self.K_net*self.n_dir*self.n_w),
+                                                    self.gp_socpop_mean_scale.reshape(self.V_net*self.K_net*self.n_dir*self.n_w) ) )
+                # Posterior GP (demeaned) #
+                pyro.sample( f"gp_socpop_demean",
+                                        dist.MultivariateNormal( self.gp_socpop_demean.reshape(self.V_net*self.K_net*self.n_dir*self.n_w , self.T_net),
+                                                                scale_tril=self.gp_socpop_cov_tril.reshape(self.V_net*self.K_net*self.n_dir*self.n_w , self.T_net, self.T_net) ) )
 
         # pyro.sample( "kernel.variance", dist.InverseGamma( self.kernel_param[1,0], self.kernel_param[1,1] ) )
 
@@ -263,12 +320,11 @@ class dmn_toy3( pyro.nn.PyroModule ):
 
     def gen_synth_net(self):
 
-        # Mean function of the GP
-        gp_coord_mean = torch.zeros((self.V_net,self.H_dim))
-
-        # Latent coordinates
-        gp_coord_demean = torch.zeros( (self.V_net,self.H_dim,self.T_net) )
-        gp_coord = torch.zeros( (self.V_net,self.H_dim,self.T_net) )
+        # Latent coordinates #
+        if self.coord:
+            gp_coord_mean = torch.zeros((self.V_net,self.H_dim))
+            gp_coord_demean = torch.zeros( (self.V_net,self.H_dim,self.T_net) )
+            gp_coord = torch.zeros( (self.V_net,self.H_dim,self.T_net) )
 
         # zero_loc = torch.zeros( (self.T_net) )
         for v in range( self.V_net ):
@@ -279,7 +335,7 @@ class dmn_toy3( pyro.nn.PyroModule ):
                 #                             dist.Normal(loc=0,scale=1) )
                 # Sample coordinates #
                 gp_coord[v,h,:] = dist.MultivariateNormal( self.gp_loc[v,h,:].detach(),
-                                                                    scale_tril=self.gp_cov_tril[v,h,:,:].detach() ).sample()
+                                                                    scale_tril=self.gp_coord_cov_tril[v,h,:,:].detach() ).sample()
                 # Latent coordinates with mean
                 # gp_coord[v,h,:] = gp_coord_mean[v,h] + gp_coord_demean[v,h,:]
 
@@ -306,20 +362,32 @@ class dmn_toy3( pyro.nn.PyroModule ):
         hmc_samples = {k: v.detach().cpu().numpy() for k, v in mcmc.get_samples().items()}
 
         ### Get samples from mcmc ###
-        # Systemic components
+        # systemic components #
         gp_system_mean = torch.tensor(hmc_samples['gp_system_mean']).reshape(num_samples, self.K_net, self.n_w)
         gp_system_demean = torch.tensor(hmc_samples[f'gp_system_demean']).reshape(num_samples, self.K_net, self.n_w, self.T_net)
-        # latent coordinates #
-        gp_coord_mean = torch.tensor(hmc_samples['gp_coord_mean']).reshape(num_samples, self.V_net, self.H_dim, self.K_net, self.n_dir, self.n_w)
-        gp_coord_demean = torch.tensor(hmc_samples[f'gp_coord_demean']).reshape(num_samples, self.V_net, self.H_dim, self.K_net, self.n_dir, self.n_w, self.T_net)
-
         # keep only last sample
         gp_system_mean_ini = gp_system_mean[num_samples-1]
         gp_system_demean_ini = gp_system_demean[num_samples-1]
-        gp_coord_mean_ini = gp_coord_mean[num_samples-1]
-        gp_coord_demean_ini = gp_coord_demean[num_samples-1]
+        # latent coordinates #
+        if self.coord:
+            gp_coord_mean = torch.tensor(hmc_samples['gp_coord_mean']).reshape(num_samples, self.V_net, self.H_dim, self.K_net, self.n_dir, self.n_w)
+            gp_coord_demean = torch.tensor(hmc_samples[f'gp_coord_demean']).reshape(num_samples, self.V_net, self.H_dim, self.K_net, self.n_dir, self.n_w, self.T_net)
+            gp_coord_mean_ini = gp_coord_mean[num_samples-1]
+            gp_coord_demean_ini = gp_coord_demean[num_samples-1]
+        else:
+            gp_coord_mean_ini = None
+            gp_coord_demean_ini = None
+        # sociability and popularity #
+        if self.socpop:
+            gp_socpop_mean = torch.tensor(hmc_samples['gp_socpop_mean']).reshape(num_samples, self.V_net, self.K_net, self.n_dir, self.n_w)
+            gp_socpop_demean = torch.tensor(hmc_samples[f'gp_socpop_demean']).reshape(num_samples, self.V_net, self.K_net, self.n_dir, self.n_w, self.T_net)
+            gp_socpop_mean_ini = gp_socpop_mean[num_samples-1]
+            gp_socpop_demean_ini = gp_socpop_demean[num_samples-1]
+        else:
+            gp_socpop_mean_ini = None
+            gp_socpop_demean_ini = None
 
-        return (gp_system_mean_ini, gp_system_demean_ini, gp_coord_mean_ini,gp_coord_demean_ini)
+        return (gp_system_mean_ini, gp_system_demean_ini, gp_coord_mean_ini,gp_coord_demean_ini, gp_socpop_mean_ini,gp_socpop_demean_ini)
         # gp_coord = gp_coord_mean.expand(self.T_net, self.V_net, self.H_dim, self.n_dir).permute(1,2,3,0) + gp_coord_demean
 
         # # Get probabilities from mcmc #
